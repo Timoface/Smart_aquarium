@@ -4,6 +4,9 @@ import datetime
 import json
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+import schedule
+import time
+import threading
 
 import commands
 
@@ -21,6 +24,27 @@ def load_last_data():
 def save_last_data(data):
     with open("last_data.json", "w") as file:
         json.dump(data, file, indent=4)
+
+def feed_small_job():
+    commands.feed_small()
+    last_data = load_last_data()
+    last_data["last_feed_small"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    save_last_data(last_data)
+
+def feed_big_job():
+    commands.feed_big()
+    last_data = load_last_data()
+    last_data["last_feed_big"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    save_last_data(last_data)
+
+def start_scheduler():
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+
+scheduler_thread = threading.Thread(target=start_scheduler)
+scheduler_thread.daemon = True
+scheduler_thread.start()
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -101,15 +125,81 @@ def callback_query(call):
             parse_mode="HTML"
         )
     elif call.data == "feed_small":
-        bot.answer_callback_query(call.id, "Маленькие рыбки накормлены! 🐟🥬")
-        commands.feed_small()
-        last_data["last_feed_small"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        save_last_data(last_data)
+        small_fish_markup = InlineKeyboardMarkup()
+        small_fish_markup.add(InlineKeyboardButton(
+            text="Покормить один раз",
+            callback_data="feed_small_once"
+        ))
+        small_fish_markup.add(InlineKeyboardButton(
+            text="Регулярное кормление (30 мин)",
+            callback_data="feed_small_30min"
+        ))
+        small_fish_markup.add(InlineKeyboardButton(
+            text="Регулярное кормление (1 час)",
+            callback_data="feed_small_1h"
+        ))
+        small_fish_markup.add(InlineKeyboardButton(
+            text="Регулярное кормление (2 часа)",
+            callback_data="feed_small_2h"
+        ))
+
+        bot.edit_message_text(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            text="<b>Выбери действие для маленьких рыбок:</b>",
+            reply_markup=small_fish_markup,
+            parse_mode="HTML"
+        )
     elif call.data == "feed_big":
+        big_fish_markup = InlineKeyboardMarkup()
+        big_fish_markup.add(InlineKeyboardButton(
+            text="Покормить один раз",
+            callback_data="feed_big_once"
+        ))
+        big_fish_markup.add(InlineKeyboardButton(
+            text="Регулярное кормление (30 мин)",
+            callback_data="feed_big_30min"
+        ))
+        big_fish_markup.add(InlineKeyboardButton(
+            text="Регулярное кормление (1 час)",
+            callback_data="feed_big_1h"
+        ))
+        big_fish_markup.add(InlineKeyboardButton(
+            text="Регулярное кормление (2 часа)",
+            callback_data="feed_big_2h"
+        ))
+
+        bot.edit_message_text(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            text="<b>Выбери действие для больших рыбок:</b>",
+            reply_markup=big_fish_markup,
+            parse_mode="HTML"
+        )
+    elif call.data == "feed_small_once":
+        bot.answer_callback_query(call.id, "Маленькие рыбки накормлены! 🐟🥬")
+        feed_small_job()
+    elif call.data == "feed_big_once":
         bot.answer_callback_query(call.id, "Большие рыбки накормлены! 🐠🥬")
-        commands.feed_big()
-        last_data["last_feed_big"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        save_last_data(last_data)
+        feed_big_job()
+    elif call.data == "feed_small_30min":
+        schedule.every(30).minutes.do(feed_small_job)
+        bot.answer_callback_query(call.id, "Регулярное кормление маленьких рыбок настроено на каждые 30 минут!")
+    elif call.data == "feed_small_1h":
+        schedule.every().hour.do(feed_small_job)
+        bot.answer_callback_query(call.id, "Регулярное кормление маленьких рыбок настроено на каждый час!")
+    elif call.data == "feed_small_2h":
+        schedule.every(2).hours.do(feed_small_job)
+        bot.answer_callback_query(call.id, "Регулярное кормление маленьких рыбок настроено на каждые 2 часа!")
+    elif call.data == "feed_big_30min":
+        schedule.every(30).minutes.do(feed_big_job)
+        bot.answer_callback_query(call.id, "Регулярное кормление больших рыбок настроено на каждые 30 минут!")
+    elif call.data == "feed_big_1h":
+        schedule.every().hour.do(feed_big_job)
+        bot.answer_callback_query(call.id, "Регулярное кормление больших рыбок настроено на каждый час!")
+    elif call.data == "feed_big_2h":
+        schedule.every(2).hours.do(feed_big_job)
+        bot.answer_callback_query(call.id, "Регулярное кормление больших рыбок настроено на каждые 2 часа!")
     elif call.data == "temperature":
         temperature = commands.temperature()
         bot.answer_callback_query(call.id, f"Температура воды: {temperature}°C 🌡")
